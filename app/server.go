@@ -2,17 +2,25 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"os"
+	"strings"
 )
 
-// strings.Split(" ")
 func packetParser(conn net.Conn) {
+	buf := make([]byte, 1024)
+	n, err := conn.Read(buf) // conn<-Read<-buf
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer conn.Close()
-	fmt.Println("Processing connection:", conn.RemoteAddr())
 
+	req := strings.Split(string(buf[:n]), " ")
+	if req[1] != "/" {
+		conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+	}
 	conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
-	fmt.Println("Response sent to client")
 }
 
 func main() {
@@ -25,20 +33,11 @@ func main() {
 	defer l.Close()
 
 	for {
-		// Wait for connection
 		conn, err := l.Accept()
 		if err != nil {
 			fmt.Println("Error accepting connection: ", err.Error())
 			os.Exit(1)
 		}
-		// Handle the connection in a new goroutine.
-		// The loop then returns to accepting, so that
-		// multiple connections may be served concurrently
 		go packetParser(conn)
 	}
 }
-
-// -------------------------------------------------------------
-// HTTP/1.1 200 OK\r\n\r\n
-// line, err := reader.ReadString()
-// fmt.Println("data := bufio.NewReader(conn): ", data)
