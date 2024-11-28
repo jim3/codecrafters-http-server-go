@@ -17,10 +17,10 @@ func httpParser(conn net.Conn) {
 	}
 	defer conn.Close()
 
-	// slice request
+	// slice up request
 	req := strings.Split(string(buf[:n]), " ")
 
-	// request line & body
+	// request line
 	var protocol = "HTTP/1.1 200 OK\r\n"
 	var url = strings.TrimSpace(req[1])
 	var body = strings.Split(url, "/")
