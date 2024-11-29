@@ -52,7 +52,6 @@ func httpParser(conn net.Conn) {
 	req := strings.Split(string(buf[:n]), " ")
 
 	// request line
-	// var protocol = "HTTP/1.1 200 OK\r\n"
 	var url = strings.TrimSpace(req[1])
 	var body = strings.Split(url, "/")
 	var resBody = strings.TrimSpace(body[len(body)-1])
