@@ -6,11 +6,13 @@ import (
 	"log"
 	"net"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 )
 
 var protocol = "HTTP/1.1 200 OK\r\n"
+var http201 = "HTTP/1.1 201 Created\r\n\r\n"
 
 type ParserConfig struct {
 	conn     net.Conn
@@ -36,7 +38,6 @@ func echo(conn net.Conn, header map[string]string, resBody string) error {
 }
 
 func userAgent(conn net.Conn, req []string) error {
-	// extract user-agent info
 	var userString string
 	var userAgentLength string
 	if len(req) > 4 {
@@ -58,8 +59,40 @@ func userAgent(conn net.Conn, req []string) error {
 	return writeResponse(conn, response)
 }
 
-func fileReader(conn net.Conn, filePath string, resBody string) error {
+func fileReaderPost(conn net.Conn, filePath string, resBody string, req []string) error {
+	str := strings.Join(req, "\n")
+
+	// lines with single \r\n won't match
+	re, writeErr := regexp.Compile(`\r\n\r\n[\w\s]+`)
+	if writeErr != nil {
+		log.Fatal(writeErr)
+	}
+
+	match := re.FindAllString(str, -1)
+	resStr := strings.Join(match, " ")
+	replacedStr := strings.ReplaceAll(resStr, "\n", " ")
+	responseString := strings.TrimSpace(replacedStr)
+
 	var fp = filePath + resBody
+	if _, err := os.Stat(fp); err == nil {
+		return writeResponse(conn, "HTTP/1.1 404 Not Found\r\n\r\n")
+	}
+
+	// Create and write file in one step
+	err := os.WriteFile(fp, []byte(responseString), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write file: %v", err)
+	}
+
+	return writeResponse(conn, http201)
+}
+
+func fileReader(conn net.Conn, filePath string, resBody string, req []string) error {
+	var fp = filePath + resBody
+
+	if req[0] == "POST" {
+		return fileReaderPost(conn, filePath, resBody, req)
+	}
 
 	// check if file exists
 	if _, err := os.Stat(fp); errors.Is(err, os.ErrNotExist) {
@@ -117,7 +150,7 @@ func httpParser(config ParserConfig) {
 	case strings.Contains(req[1], "/user-agent"):
 		err = userAgent(config.conn, req)
 	case strings.Contains(req[1], "/files"):
-		err = fileReader(config.conn, config.filePath, resBody)
+		err = fileReader(config.conn, config.filePath, resBody, req)
 	default:
 		err = writeResponse(config.conn, "HTTP/1.1 404 Not Found\r\n\r\n")
 	}
@@ -142,6 +175,7 @@ func main() {
 	var filePath string
 	if len(os.Args) > 2 {
 		filePath = os.Args[2]
+		fmt.Println("filePath: ", filePath)
 	}
 
 	for {
