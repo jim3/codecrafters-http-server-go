@@ -32,8 +32,49 @@ func root(conn net.Conn) error {
 	return writeResponse(conn, "HTTP/1.1 200 OK\r\n\r\n")
 }
 
-func echo(conn net.Conn, header map[string]string, resBody string) error {
-	response := protocol + "Content-Type: " + header["Content-Type: "] + "Content-Length: " + header["Content-Length: "] + resBody
+// func gzip(conn net.Conn, req []string) error {
+// 	fmt.Println("req[:]", req[:])
+// 	str := strings.Join(req, " ")
+
+// 	re, err := regexp.Compile(`Accept-Encoding: [\w]+`)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+
+// 	match := re.FindString(str)
+// 	acceptEncGzip := strings.TrimSpace(match)
+// 	fmt.Println("acceptEncGzip", acceptEncGzip)
+
+// 	// headers
+// 	var header = map[string]string{
+// 		"Content-Type: ":     "text/plain\r\n",
+// 		"Content-Encoding: ": "gzip" + "\r\n\r\n",
+// 	}
+
+// 	response := protocol + "Content-Type: " + header["Content-Type: "] + "Content-Encoding: " + header["Content-Encoding: "]
+// 	return writeResponse(conn, response)
+
+// }
+
+// "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Encoding: gzip\r\n\r\n"
+func echo(conn net.Conn, header map[string]string, resBody string, req []string) error {
+	fmt.Println("req[:]", req[:])
+	str := strings.Join(req, " ")
+
+	if strings.Contains(str, "invalid-encoding") {
+		response := protocol + "Content-Type: text/plain" + "\r\n\r\n"
+		return writeResponse(conn, response)
+	} else {
+		if strings.Contains(str, "Accept-Encoding") {
+			// return gzip(conn, req)
+			response := protocol + "Content-Type: text/plain\r\nContent-Encoding: gzip\r\n\r\n"
+			return writeResponse(conn, response)
+		}
+	}
+
+	// response
+	response := protocol + "Content-Type: " + header["Content-Type: "] + "Content-Length: " +
+		header["Content-Length: "] + resBody
 	return writeResponse(conn, response)
 }
 
@@ -57,34 +98,6 @@ func userAgent(conn net.Conn, req []string) error {
 	// send response
 	response := protocol + "Content-Type: " + header["Content-Type: "] + "Content-Length: " + userAgentLength + "\r\n\r\n" + userString
 	return writeResponse(conn, response)
-}
-
-func fileReaderPost(conn net.Conn, filePath string, resBody string, req []string) error {
-	str := strings.Join(req, "\n")
-
-	// lines with single \r\n won't match
-	re, writeErr := regexp.Compile(`\r\n\r\n[\w\s]+`)
-	if writeErr != nil {
-		log.Fatal(writeErr)
-	}
-
-	match := re.FindAllString(str, -1)
-	resStr := strings.Join(match, " ")
-	replacedStr := strings.ReplaceAll(resStr, "\n", " ")
-	responseString := strings.TrimSpace(replacedStr)
-
-	var fp = filePath + resBody
-	if _, err := os.Stat(fp); err == nil {
-		return writeResponse(conn, "HTTP/1.1 404 Not Found\r\n\r\n")
-	}
-
-	// Create and write file in one step
-	err := os.WriteFile(fp, []byte(responseString), 0644)
-	if err != nil {
-		return fmt.Errorf("failed to write file: %v", err)
-	}
-
-	return writeResponse(conn, http201)
 }
 
 func fileReader(conn net.Conn, filePath string, resBody string, req []string) error {
@@ -114,6 +127,34 @@ func fileReader(conn net.Conn, filePath string, resBody string, req []string) er
 
 	response := protocol + "Content-Type: " + header["Content-Type: "] + "Content-Length: " + fileContentLength + "\r\n\r\n" + string(f)
 	return writeResponse(conn, response)
+}
+
+func fileReaderPost(conn net.Conn, filePath string, resBody string, req []string) error {
+	str := strings.Join(req, "\n")
+
+	// lines with single \r\n won't match
+	re, writeErr := regexp.Compile(`\r\n\r\n[\w\s]+`)
+	if writeErr != nil {
+		log.Fatal(writeErr)
+	}
+
+	match := re.FindAllString(str, -1)
+	resStr := strings.Join(match, " ")
+	replacedStr := strings.ReplaceAll(resStr, "\n", " ")
+	responseString := strings.TrimSpace(replacedStr)
+
+	var fp = filePath + resBody
+	if _, err := os.Stat(fp); err == nil {
+		return writeResponse(conn, "HTTP/1.1 404 Not Found\r\n\r\n")
+	}
+
+	// Create and write file in one step
+	err := os.WriteFile(fp, []byte(responseString), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write file: %v", err)
+	}
+
+	return writeResponse(conn, http201)
 }
 
 // -------------------------------------------------------- //
@@ -146,7 +187,7 @@ func httpParser(config ParserConfig) {
 	case req[1] == "/":
 		err = root(config.conn)
 	case strings.Contains(req[1], "/echo"):
-		err = echo(config.conn, header, resBody)
+		err = echo(config.conn, header, resBody, req)
 	case strings.Contains(req[1], "/user-agent"):
 		err = userAgent(config.conn, req)
 	case strings.Contains(req[1], "/files"):
