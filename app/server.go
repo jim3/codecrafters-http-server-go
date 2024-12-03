@@ -32,33 +32,39 @@ func root(conn net.Conn) error {
 	return writeResponse(conn, "HTTP/1.1 200 OK\r\n\r\n")
 }
 
-// func gzip(conn net.Conn, req []string) error {
-// 	fmt.Println("req[:]", req[:])
-// 	str := strings.Join(req, " ")
+func gzip(conn net.Conn, req []string) error {
+	str := strings.Join(req, " ")
+	fmt.Println("str\n", str)
 
-// 	re, err := regexp.Compile(`Accept-Encoding: [\w]+`)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
+	re, err := regexp.Compile(`Accept-Encoding: [-\w,\s]+`)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-// 	match := re.FindString(str)
-// 	acceptEncGzip := strings.TrimSpace(match)
-// 	fmt.Println("acceptEncGzip", acceptEncGzip)
+	match := re.FindString(str)
+	fmt.Println("match", match)
+	matchTrimmed := strings.TrimSpace(match)
+	fmt.Println("match", matchTrimmed)
 
-// 	// headers
-// 	var header = map[string]string{
-// 		"Content-Type: ":     "text/plain\r\n",
-// 		"Content-Encoding: ": "gzip" + "\r\n\r\n",
-// 	}
+	// headers
+	var header = map[string]string{
+		"Content-Type: ":     "text/plain\r\n",
+		"Content-Encoding: ": "gzip" + "\r\n\r\n",
+	}
 
-// 	response := protocol + "Content-Type: " + header["Content-Type: "] + "Content-Encoding: " + header["Content-Encoding: "]
-// 	return writeResponse(conn, response)
+	var response string
+	if strings.Contains(match, "gzip") {
+		response = protocol + "Content-Type: " + header["Content-Type: "] + "Content-Encoding: " + header["Content-Encoding: "]
+	} else {
+		response := protocol + "Content-Type: text/plain" + "\r\n\r\n"
+		return writeResponse(conn, response)
+	}
 
-// }
+	return writeResponse(conn, response)
 
-// "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Encoding: gzip\r\n\r\n"
+}
+
 func echo(conn net.Conn, header map[string]string, resBody string, req []string) error {
-	fmt.Println("req[:]", req[:])
 	str := strings.Join(req, " ")
 
 	if strings.Contains(str, "invalid-encoding") {
@@ -66,9 +72,7 @@ func echo(conn net.Conn, header map[string]string, resBody string, req []string)
 		return writeResponse(conn, response)
 	} else {
 		if strings.Contains(str, "Accept-Encoding") {
-			// return gzip(conn, req)
-			response := protocol + "Content-Type: text/plain\r\nContent-Encoding: gzip\r\n\r\n"
-			return writeResponse(conn, response)
+			return gzip(conn, req)
 		}
 	}
 
@@ -125,7 +129,8 @@ func fileReader(conn net.Conn, filePath string, resBody string, req []string) er
 		"Content-Type: ": "application/octet-stream\r\n",
 	}
 
-	response := protocol + "Content-Type: " + header["Content-Type: "] + "Content-Length: " + fileContentLength + "\r\n\r\n" + string(f)
+	response := protocol + "Content-Type: " + header["Content-Type: "] + "Content-Length: " +
+		fileContentLength + "\r\n\r\n" + string(f)
 	return writeResponse(conn, response)
 }
 
